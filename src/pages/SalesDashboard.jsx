@@ -221,6 +221,8 @@ export default function SalesDashboard() {
             .eq('consultant_id', consultantId)
             .eq('requested_date', requestedDate) // Only check same date - different dates are allowed
             .in('status', ['pending', 'approved'])
+            .not('from_time', 'is', null)
+            .not('to_time', 'is', null)
 
         if (error) {
             console.error('Error checking availability:', error)
@@ -229,15 +231,14 @@ export default function SalesDashboard() {
 
         // Check if there's any conflict on the same date
         for (const booking of existingBookings || []) {
-            // Use from_time and to_time if available, otherwise fallback to requested_time
-            const bookingFromTime = booking.from_time || booking.requested_time || '00:00'
-            const bookingToTime = booking.to_time || (() => {
-                // Calculate to_time from requested_time + 1 hour if not available
-                const [hours, minutes] = (booking.requested_time || '00:00').split(':').map(Number)
-                const endTime = new Date()
-                endTime.setHours(hours + 1, minutes, 0, 0)
-                return `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`
-            })()
+            // Use from_time and to_time (required fields)
+            if (!booking.from_time || !booking.to_time) {
+                console.warn('Booking missing from_time or to_time, skipping:', booking)
+                continue
+            }
+
+            const bookingFromTime = booking.from_time
+            const bookingToTime = booking.to_time
 
             const bookingStart = new Date(`${booking.requested_date}T${bookingFromTime}`)
             const bookingEnd = new Date(`${booking.requested_date}T${bookingToTime}`)
@@ -301,7 +302,6 @@ export default function SalesDashboard() {
                     requested_date: date,
                     from_time: fromTime,
                     to_time: toTime,
-                    requested_time: fromTime, // Keep for backward compatibility
                     notes: notes,
                     status: 'pending'
                 }
@@ -473,7 +473,7 @@ export default function SalesDashboard() {
                                                         <span className="text-xs text-gray-500">
                                                             {req.from_time && req.to_time 
                                                                 ? `${req.from_time} - ${req.to_time}`
-                                                                : req.requested_time || 'N/A'
+                                                                : 'N/A'
                                                             }
                                                         </span>
                                                     </div>

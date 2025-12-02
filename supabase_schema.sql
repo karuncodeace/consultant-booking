@@ -17,7 +17,6 @@ create table requests (
   consultant_id uuid references profiles(id), -- Optional initially, or selected
   client_name text not null,
   requested_date date not null,
-  requested_time time, -- Kept for backward compatibility, but use from_time/to_time
   from_time time not null,
   to_time time not null,
   status text check (status in ('pending', 'approved', 'rejected', 'rescheduled')) default 'pending',

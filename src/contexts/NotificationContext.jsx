@@ -80,8 +80,8 @@ export const NotificationProvider = ({ children }) => {
                                 message = `Request for "${newData.client_name}" has been approved`
                             } else if (newData.status === 'rejected') {
                                 message = `Request for "${newData.client_name}" has been rejected`
-                            } else if (newData.status === 'rescheduled' && newData.requested_date && newData.requested_time) {
-                                message = `Request for "${newData.client_name}" has been rescheduled to ${newData.requested_date} at ${newData.requested_time}`
+                            } else if (newData.status === 'rescheduled' && newData.requested_date && newData.from_time && newData.to_time) {
+                                message = `Request for "${newData.client_name}" has been rescheduled to ${newData.requested_date} from ${newData.from_time} - ${newData.to_time}`
                             } else if (newData.status && newData.status !== 'pending') {
                                 message = `Request for "${newData.client_name}" status changed to ${newData.status}`
                             }

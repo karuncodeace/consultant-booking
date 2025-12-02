@@ -65,7 +65,7 @@ export default function ConsultantDashboard() {
                     requestId: request.id,
                     clientName: request.client_name,
                     date: request.requested_date,
-                    time: request.requested_time
+                    time: `${request.from_time} - ${request.to_time}`
                 })
             } else {
                 console.error('Cannot send notification: sales person ID not found', request)
@@ -131,7 +131,6 @@ export default function ConsultantDashboard() {
                 requested_date: rescheduleDate,
                 from_time: rescheduleFromTime,
                 to_time: rescheduleToTime,
-                requested_time: rescheduleFromTime, // Keep for backward compatibility
                 notes: rescheduleMessage ? `${selectedRequest.notes || ''}\n\nReschedule message: ${rescheduleMessage}`.trim() : selectedRequest.notes,
                 updated_at: new Date().toISOString()
             })
@@ -210,17 +209,8 @@ export default function ConsultantDashboard() {
     const openRejectModal = (request) => {
         setSelectedRequest(request)
         setRescheduleDate(request.requested_date)
-        setRescheduleFromTime(request.from_time || request.requested_time || '')
-        setRescheduleToTime(request.to_time || (() => {
-            // Calculate to_time from requested_time + 1 hour if not available
-            if (request.requested_time) {
-                const [hours, minutes] = request.requested_time.split(':').map(Number)
-                const endTime = new Date()
-                endTime.setHours(hours + 1, minutes, 0, 0)
-                return `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`
-            }
-            return ''
-        })())
+        setRescheduleFromTime(request.from_time || '')
+        setRescheduleToTime(request.to_time || '')
         setRescheduleMessage('')
         setShowRejectModal(true)
     }
@@ -296,7 +286,7 @@ export default function ConsultantDashboard() {
                                         <span>
                                             {req.from_time && req.to_time 
                                                 ? `${req.from_time} - ${req.to_time}`
-                                                : req.requested_time || 'N/A'
+                                                : 'N/A'
                                             }
                                         </span>
                                     </div>
@@ -354,7 +344,7 @@ export default function ConsultantDashboard() {
                                         <span>
                                             {req.from_time && req.to_time 
                                                 ? `${req.from_time} - ${req.to_time}`
-                                                : req.requested_time || 'N/A'
+                                                : 'N/A'
                                             }
                                         </span>
                                     </div>
@@ -395,7 +385,7 @@ export default function ConsultantDashboard() {
                                         <span>
                                             {req.from_time && req.to_time 
                                                 ? `${req.from_time} - ${req.to_time}`
-                                                : req.requested_time || 'N/A'
+                                                : 'N/A'
                                             }
                                         </span>
                                     </div>
@@ -436,7 +426,7 @@ export default function ConsultantDashboard() {
                                         <span>
                                             {req.from_time && req.to_time 
                                                 ? `${req.from_time} - ${req.to_time}`
-                                                : req.requested_time || 'N/A'
+                                                : 'N/A'
                                             }
                                         </span>
                                     </div>

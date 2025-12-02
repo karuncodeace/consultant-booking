@@ -4,7 +4,7 @@
 
 ### 1. Database Schema
 - Added `from_time` and `to_time` fields to `requests` table
-- Kept `requested_time` for backward compatibility
+- Removed `requested_time` field (no longer used)
 
 ### 2. Time Slot Booking Logic Fixed
 - **Before:** Checked conflicts across all dates (incorrect)
@@ -17,7 +17,7 @@
 
 ### 4. Display Updates
 - All time displays now show: `from_time - to_time` format
-- Falls back to `requested_time` for old records
+- All code references to `requested_time` have been removed
 
 ## Migration Steps
 

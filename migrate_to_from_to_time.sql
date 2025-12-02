@@ -1,19 +1,19 @@
 -- Migration: Add from_time and to_time fields to requests table
--- Run this in Supabase SQL Editor
+-- NOTE: This migration is for reference only. If requested_time has already been removed from the database,
+-- you only need to ensure from_time and to_time columns exist.
 
--- Add new columns
+-- Add new columns (if they don't exist)
 ALTER TABLE requests 
 ADD COLUMN IF NOT EXISTS from_time time,
 ADD COLUMN IF NOT EXISTS to_time time;
 
--- Migrate existing data: set from_time = requested_time, to_time = requested_time + 1 hour
-UPDATE requests 
-SET 
-  from_time = requested_time,
-  to_time = (requested_time::time + interval '1 hour')::time
-WHERE from_time IS NULL OR to_time IS NULL;
+-- If you still have requested_time column and want to migrate data:
+-- UPDATE requests 
+-- SET 
+--   from_time = requested_time,
+--   to_time = (requested_time::time + interval '1 hour')::time
+-- WHERE from_time IS NULL OR to_time IS NULL;
 
--- Make from_time and to_time required for new records (optional - you can keep requested_time for backward compatibility)
--- Or you can drop requested_time after migration:
--- ALTER TABLE requests DROP COLUMN requested_time;
+-- Drop requested_time column (if it still exists and you want to remove it):
+-- ALTER TABLE requests DROP COLUMN IF EXISTS requested_time;
 
