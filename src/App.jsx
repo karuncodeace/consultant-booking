@@ -40,6 +40,9 @@ function App() {
             </Route>
 
             <Route path="/" element={<HomeRedirect />} />
+            
+            {/* Catch-all route - redirect unknown routes to home */}
+            <Route path="*" element={<HomeRedirect />} />
           </Routes>
         </NotificationProvider>
       </AuthProvider>

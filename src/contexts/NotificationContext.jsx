@@ -21,12 +21,20 @@ export const NotificationProvider = ({ children }) => {
                 const oldData = payload.old
                 
                 // Notify sales person if their request status changed
-                if (user.id === newData.created_by && oldData.status !== newData.status) {
-                    let message = `Your request for ${newData.client_name} was ${newData.status}`
-                    if (newData.status === 'rescheduled' && newData.requested_date && newData.requested_time) {
-                        message = `Your request for ${newData.client_name} has been rescheduled to ${newData.requested_date} at ${newData.requested_time}`
+                if (user.id === newData.created_by && oldData && oldData.status !== newData.status) {
+                    let message = ''
+                    if (newData.status === 'approved') {
+                        message = `Request for "${newData.client_name}" has been approved`
+                    } else if (newData.status === 'rejected') {
+                        message = `Request for "${newData.client_name}" has been rejected`
+                    } else if (newData.status === 'rescheduled' && newData.requested_date && newData.requested_time) {
+                        message = `Request for "${newData.client_name}" has been rescheduled to ${newData.requested_date} at ${newData.requested_time}`
+                    } else if (newData.status) {
+                        message = `Request for "${newData.client_name}" status changed to ${newData.status}`
                     }
-                    addToast(message)
+                    if (message) {
+                        addToast(message)
+                    }
                 }
             })
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'requests' }, (payload) => {
