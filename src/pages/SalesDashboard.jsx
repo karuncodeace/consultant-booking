@@ -18,7 +18,8 @@ export default function SalesDashboard() {
     const [clientName, setClientName] = useState('')
     const [consultantId, setConsultantId] = useState('')
     const [date, setDate] = useState('')
-    const [time, setTime] = useState('')
+    const [fromTime, setFromTime] = useState('')
+    const [toTime, setToTime] = useState('')
     const [notes, setNotes] = useState('')
 
     useEffect(() => {
@@ -202,18 +203,23 @@ export default function SalesDashboard() {
         if (data) setConsultants(data)
     }
 
-    const checkTimeSlotAvailability = async (consultantId, requestedDate, requestedTime) => {
-        // Parse the requested time
-        const requestedDateTime = new Date(`${requestedDate}T${requestedTime}`)
-        const requestedEndTime = new Date(requestedDateTime.getTime() + 60 * 60 * 1000) // Add 1 hour for the slot
-        const requestedBufferEnd = new Date(requestedEndTime.getTime() + 20 * 60 * 1000) // Add 20 minutes buffer after slot
+    const checkTimeSlotAvailability = async (consultantId, requestedDate, fromTime, toTime) => {
+        // Parse the requested times
+        const requestedStart = new Date(`${requestedDate}T${fromTime}`)
+        const requestedEnd = new Date(`${requestedDate}T${toTime}`)
+        const requestedBufferEnd = new Date(requestedEnd.getTime() + 20 * 60 * 1000) // Add 20 minutes buffer after slot
 
-        // Check for existing approved or pending bookings for this consultant on the same date
+        // Validate from_time < to_time
+        if (requestedStart >= requestedEnd) {
+            return { available: false, message: 'End time must be after start time' }
+        }
+
+        // Check for existing approved or pending bookings for this consultant on the SAME DATE ONLY
         const { data: existingBookings, error } = await supabase
             .from('requests')
-            .select('requested_date, requested_time, status')
+            .select('requested_date, from_time, to_time, status')
             .eq('consultant_id', consultantId)
-            .eq('requested_date', requestedDate)
+            .eq('requested_date', requestedDate) // Only check same date - different dates are allowed
             .in('status', ['pending', 'approved'])
 
         if (error) {
@@ -221,21 +227,32 @@ export default function SalesDashboard() {
             return { available: false, message: 'Error checking availability' }
         }
 
-        // Check if there's any conflict
+        // Check if there's any conflict on the same date
         for (const booking of existingBookings || []) {
-            const bookingStart = new Date(`${booking.requested_date}T${booking.requested_time}`)
-            const bookingEnd = new Date(bookingStart.getTime() + 60 * 60 * 1000) // 1 hour slot
+            // Use from_time and to_time if available, otherwise fallback to requested_time
+            const bookingFromTime = booking.from_time || booking.requested_time || '00:00'
+            const bookingToTime = booking.to_time || (() => {
+                // Calculate to_time from requested_time + 1 hour if not available
+                const [hours, minutes] = (booking.requested_time || '00:00').split(':').map(Number)
+                const endTime = new Date()
+                endTime.setHours(hours + 1, minutes, 0, 0)
+                return `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`
+            })()
+
+            const bookingStart = new Date(`${booking.requested_date}T${bookingFromTime}`)
+            const bookingEnd = new Date(`${booking.requested_date}T${bookingToTime}`)
             const bookingBufferEnd = new Date(bookingEnd.getTime() + 20 * 60 * 1000) // 20 min buffer after booking
 
             // Check for any overlap or conflict:
             // 1. Requested slot starts before booking but ends during booking or buffer
             // 2. Requested slot starts during booking or buffer
             // 3. Requested slot completely contains the booking
-            const requestedStartsBeforeAndOverlaps = requestedDateTime < bookingStart && requestedBufferEnd > bookingStart
-            const requestedStartsDuringBooking = requestedDateTime >= bookingStart && requestedDateTime < bookingBufferEnd
-            const requestedContainsBooking = requestedDateTime <= bookingStart && requestedBufferEnd >= bookingBufferEnd
+            const requestedStartsBeforeAndOverlaps = requestedStart < bookingStart && requestedBufferEnd > bookingStart
+            const requestedStartsDuringBooking = requestedStart >= bookingStart && requestedStart < bookingBufferEnd
+            const requestedEndsDuringBooking = requestedEnd > bookingStart && requestedEnd <= bookingBufferEnd
+            const requestedContainsBooking = requestedStart <= bookingStart && requestedBufferEnd >= bookingBufferEnd
 
-            if (requestedStartsBeforeAndOverlaps || requestedStartsDuringBooking || requestedContainsBooking) {
+            if (requestedStartsBeforeAndOverlaps || requestedStartsDuringBooking || requestedEndsDuringBooking || requestedContainsBooking) {
                 // Calculate the next available time (booking end + 20 min buffer)
                 const nextAvailable = new Date(bookingBufferEnd)
                 const nextHour = String(nextAvailable.getHours()).padStart(2, '0')
@@ -244,7 +261,7 @@ export default function SalesDashboard() {
                 
                 return {
                     available: false,
-                    message: `This consultant is already booked at ${booking.requested_time}. Please choose a time after ${nextAvailableTime} (with 20-minute buffer).`
+                    message: `This consultant is already booked from ${bookingFromTime} to ${bookingToTime} on this date. Please choose a time after ${nextAvailableTime} (with 20-minute buffer).`
                 }
             }
         }
@@ -255,13 +272,19 @@ export default function SalesDashboard() {
     const handleSubmit = async (e) => {
         e.preventDefault()
         
-        if (!consultantId || !date || !time) {
+        if (!consultantId || !date || !fromTime || !toTime) {
             alert('Please fill in all required fields')
             return
         }
 
-        // Check time slot availability
-        const availability = await checkTimeSlotAvailability(consultantId, date, time)
+        // Validate times
+        if (fromTime >= toTime) {
+            alert('End time must be after start time')
+            return
+        }
+
+        // Check time slot availability (only checks same date)
+        const availability = await checkTimeSlotAvailability(consultantId, date, fromTime, toTime)
         
         if (!availability.available) {
             alert(availability.message)
@@ -276,7 +299,9 @@ export default function SalesDashboard() {
                     client_name: clientName,
                     consultant_id: consultantId,
                     requested_date: date,
-                    requested_time: time,
+                    from_time: fromTime,
+                    to_time: toTime,
+                    requested_time: fromTime, // Keep for backward compatibility
                     notes: notes,
                     status: 'pending'
                 }
@@ -290,7 +315,8 @@ export default function SalesDashboard() {
             setClientName('')
             setConsultantId('')
             setDate('')
-            setTime('')
+            setFromTime('')
+            setToTime('')
             setNotes('')
         }
     }
@@ -444,7 +470,12 @@ export default function SalesDashboard() {
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
                                                     <div className="flex flex-col">
                                                         <span>{req.requested_date}</span>
-                                                        <span className="text-xs text-gray-500">{req.requested_time}</span>
+                                                        <span className="text-xs text-gray-500">
+                                                            {req.from_time && req.to_time 
+                                                                ? `${req.from_time} - ${req.to_time}`
+                                                                : req.requested_time || 'N/A'
+                                                            }
+                                                        </span>
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -496,14 +527,19 @@ export default function SalesDashboard() {
                                 </select>
                             </div>
 
+                            <div>
+                                <label className="block text-sm font-medium mb-2 text-gray-700">Date</label>
+                                <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="py-3 px-4 block w-full border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none" />
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium mb-2 text-gray-700">Date</label>
-                                    <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="py-3 px-4 block w-full border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none" />
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">From Time</label>
+                                    <input type="time" required value={fromTime} onChange={e => setFromTime(e.target.value)} className="py-3 px-4 block w-full border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-2 text-gray-700">Time</label>
-                                    <input type="time" required value={time} onChange={e => setTime(e.target.value)} className="py-3 px-4 block w-full border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none" />
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">To Time</label>
+                                    <input type="time" required value={toTime} onChange={e => setToTime(e.target.value)} className="py-3 px-4 block w-full border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none" />
                                 </div>
                             </div>
 

@@ -17,7 +17,9 @@ create table requests (
   consultant_id uuid references profiles(id), -- Optional initially, or selected
   client_name text not null,
   requested_date date not null,
-  requested_time time not null,
+  requested_time time, -- Kept for backward compatibility, but use from_time/to_time
+  from_time time not null,
+  to_time time not null,
   status text check (status in ('pending', 'approved', 'rejected', 'rescheduled')) default 'pending',
   notes text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
@@ -110,9 +112,12 @@ create policy "Users can view own notifications" on notifications
   for select using (auth.uid() = recipient_id);
 
 -- Users can insert notifications (for system notifications)
--- In practice, only consultants/admins should insert, but we'll allow authenticated users
-create policy "Authenticated users can insert notifications" on notifications
-  for insert with check (true);
+-- This allows consultants/admins to send notifications to sales people
+-- Using 'TO authenticated' ensures only logged-in users can insert
+create policy "Allow authenticated users to insert notifications" on notifications
+  for insert
+  to authenticated
+  with check (true);
 
 -- Users can update their own notifications (to mark as read)
 create policy "Users can update own notifications" on notifications

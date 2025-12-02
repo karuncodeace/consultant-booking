@@ -11,7 +11,8 @@ export default function ConsultantDashboard() {
     const [loading, setLoading] = useState(true)
     const [selectedRequest, setSelectedRequest] = useState(null)
     const [showRejectModal, setShowRejectModal] = useState(false)
-    const [rescheduleTime, setRescheduleTime] = useState('')
+    const [rescheduleFromTime, setRescheduleFromTime] = useState('')
+    const [rescheduleToTime, setRescheduleToTime] = useState('')
     const [rescheduleDate, setRescheduleDate] = useState('')
     const [rescheduleMessage, setRescheduleMessage] = useState('')
 
@@ -105,15 +106,21 @@ export default function ConsultantDashboard() {
             setShowRejectModal(false)
             setSelectedRequest(null)
             setRescheduleDate('')
-            setRescheduleTime('')
+            setRescheduleFromTime('')
+            setRescheduleToTime('')
             setRescheduleMessage('')
             fetchRequests()
         }
     }
 
     const handleReschedule = async () => {
-        if (!selectedRequest || !rescheduleDate || !rescheduleTime) {
-            alert('Please provide both date and time for rescheduling')
+        if (!selectedRequest || !rescheduleDate || !rescheduleFromTime || !rescheduleToTime) {
+            alert('Please provide date, from time, and to time for rescheduling')
+            return
+        }
+
+        if (rescheduleFromTime >= rescheduleToTime) {
+            alert('End time must be after start time')
             return
         }
 
@@ -122,7 +129,9 @@ export default function ConsultantDashboard() {
             .update({ 
                 status: 'rescheduled',
                 requested_date: rescheduleDate,
-                requested_time: rescheduleTime,
+                from_time: rescheduleFromTime,
+                to_time: rescheduleToTime,
+                requested_time: rescheduleFromTime, // Keep for backward compatibility
                 notes: rescheduleMessage ? `${selectedRequest.notes || ''}\n\nReschedule message: ${rescheduleMessage}`.trim() : selectedRequest.notes,
                 updated_at: new Date().toISOString()
             })
@@ -141,7 +150,7 @@ export default function ConsultantDashboard() {
                     requestId: selectedRequest.id,
                     clientName: selectedRequest.client_name,
                     newDate: rescheduleDate,
-                    newTime: rescheduleTime,
+                    newTime: `${rescheduleFromTime} - ${rescheduleToTime}`,
                     message: rescheduleMessage
                 })
             } else {
@@ -151,7 +160,8 @@ export default function ConsultantDashboard() {
             setShowRejectModal(false)
             setSelectedRequest(null)
             setRescheduleDate('')
-            setRescheduleTime('')
+            setRescheduleFromTime('')
+            setRescheduleToTime('')
             setRescheduleMessage('')
             fetchRequests()
         }
@@ -165,7 +175,7 @@ export default function ConsultantDashboard() {
             } else if (notificationData.type === 'rejected') {
                 message = `Request for "${notificationData.clientName}" has been rejected`
             } else if (notificationData.type === 'rescheduled') {
-                message = `Request for "${notificationData.clientName}" has been rescheduled to ${notificationData.newDate} at ${notificationData.newTime}`
+                message = `Request for "${notificationData.clientName}" has been rescheduled to ${notificationData.newDate} from ${notificationData.newTime}`
             }
 
             if (message) {
@@ -200,7 +210,17 @@ export default function ConsultantDashboard() {
     const openRejectModal = (request) => {
         setSelectedRequest(request)
         setRescheduleDate(request.requested_date)
-        setRescheduleTime(request.requested_time)
+        setRescheduleFromTime(request.from_time || request.requested_time || '')
+        setRescheduleToTime(request.to_time || (() => {
+            // Calculate to_time from requested_time + 1 hour if not available
+            if (request.requested_time) {
+                const [hours, minutes] = request.requested_time.split(':').map(Number)
+                const endTime = new Date()
+                endTime.setHours(hours + 1, minutes, 0, 0)
+                return `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`
+            }
+            return ''
+        })())
         setRescheduleMessage('')
         setShowRejectModal(true)
     }
@@ -271,10 +291,15 @@ export default function ConsultantDashboard() {
                                                     <Calendar size={16} />
                                                     <span>{req.requested_date}</span>
                                                 </div>
-                                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                    <Clock size={16} />
-                                                    <span>{req.requested_time}</span>
-                                                </div>
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <Clock size={16} />
+                                        <span>
+                                            {req.from_time && req.to_time 
+                                                ? `${req.from_time} - ${req.to_time}`
+                                                : req.requested_time || 'N/A'
+                                            }
+                                        </span>
+                                    </div>
                                                 {req.notes && (
                                                     <div className="mt-2 p-3 bg-gray-50 rounded text-sm text-gray-600 italic">
                                                         "{req.notes}"
@@ -324,10 +349,15 @@ export default function ConsultantDashboard() {
                                                     <Calendar size={16} />
                                                     <span>{req.requested_date}</span>
                                                 </div>
-                                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                    <Clock size={16} />
-                                                    <span>{req.requested_time}</span>
-                                                </div>
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <Clock size={16} />
+                                        <span>
+                                            {req.from_time && req.to_time 
+                                                ? `${req.from_time} - ${req.to_time}`
+                                                : req.requested_time || 'N/A'
+                                            }
+                                        </span>
+                                    </div>
                                                 {req.notes && (
                                                     <div className="mt-2 p-3 bg-gray-50 rounded text-sm text-gray-600 italic">
                                                         "{req.notes}"
@@ -360,10 +390,15 @@ export default function ConsultantDashboard() {
                                                     <Calendar size={16} />
                                                     <span>{req.requested_date}</span>
                                                 </div>
-                                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                    <Clock size={16} />
-                                                    <span>{req.requested_time}</span>
-                                                </div>
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <Clock size={16} />
+                                        <span>
+                                            {req.from_time && req.to_time 
+                                                ? `${req.from_time} - ${req.to_time}`
+                                                : req.requested_time || 'N/A'
+                                            }
+                                        </span>
+                                    </div>
                                                 {req.notes && (
                                                     <div className="mt-2 p-3 bg-gray-50 rounded text-sm text-gray-600 italic">
                                                         "{req.notes}"
@@ -396,10 +431,15 @@ export default function ConsultantDashboard() {
                                                     <Calendar size={16} />
                                                     <span>{req.requested_date}</span>
                                                 </div>
-                                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                    <Clock size={16} />
-                                                    <span>{req.requested_time}</span>
-                                                </div>
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <Clock size={16} />
+                                        <span>
+                                            {req.from_time && req.to_time 
+                                                ? `${req.from_time} - ${req.to_time}`
+                                                : req.requested_time || 'N/A'
+                                            }
+                                        </span>
+                                    </div>
                                                 {req.notes && (
                                                     <div className="mt-2 p-3 bg-gray-50 rounded text-sm text-gray-600 italic">
                                                         "{req.notes}"
@@ -432,14 +472,25 @@ export default function ConsultantDashboard() {
                                     className="py-2 px-3 block w-full border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none" 
                                 />
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-2 text-gray-700">New Time</label>
-                                <input 
-                                    type="time" 
-                                    value={rescheduleTime} 
-                                    onChange={e => setRescheduleTime(e.target.value)} 
-                                    className="py-2 px-3 block w-full border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none" 
-                                />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">From Time</label>
+                                    <input 
+                                        type="time" 
+                                        value={rescheduleFromTime} 
+                                        onChange={e => setRescheduleFromTime(e.target.value)} 
+                                        className="py-2 px-3 block w-full border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none" 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2 text-gray-700">To Time</label>
+                                    <input 
+                                        type="time" 
+                                        value={rescheduleToTime} 
+                                        onChange={e => setRescheduleToTime(e.target.value)} 
+                                        className="py-2 px-3 block w-full border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none" 
+                                    />
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-2 text-gray-700">Message (Optional)</label>
@@ -457,7 +508,8 @@ export default function ConsultantDashboard() {
                                         setShowRejectModal(false)
                                         setSelectedRequest(null)
                                         setRescheduleDate('')
-                                        setRescheduleTime('')
+                                        setRescheduleFromTime('')
+                                        setRescheduleToTime('')
                                         setRescheduleMessage('')
                                     }} 
                                     className="py-2 px-4 inline-flex justify-center items-center gap-x-2 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-800 shadow-sm hover:bg-gray-50"
