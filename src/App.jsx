@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import RoleGuard from './components/RoleGuard'
 import Login from './pages/Login'
+import { Toaster } from 'react-hot-toast'
 
 // Placeholder components for now
 import SalesDashboard from './pages/SalesDashboard'
@@ -44,6 +45,31 @@ function App() {
             {/* Catch-all route - redirect unknown routes to home */}
             <Route path="*" element={<HomeRedirect />} />
           </Routes>
+          <Toaster 
+            position="top-right"
+            toastOptions={{
+              duration: 5000,
+              style: {
+                background: '#fff',
+                color: '#333',
+                border: '1px solid #e5e7eb',
+                borderRadius: '0.75rem',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+              },
+              success: {
+                iconTheme: {
+                  primary: '#10b981',
+                  secondary: '#fff',
+                },
+              },
+              error: {
+                iconTheme: {
+                  primary: '#ef4444',
+                  secondary: '#fff',
+                },
+              },
+            }}
+          />
         </NotificationProvider>
       </AuthProvider>
     </Router>

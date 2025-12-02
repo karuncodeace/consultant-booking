@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from './AuthContext'
 import { Bell } from 'lucide-react'
@@ -10,6 +10,12 @@ export const useNotification = () => useContext(NotificationContext)
 export const NotificationProvider = ({ children }) => {
     const { user } = useAuth()
     const [toasts, setToasts] = useState([])
+    const toastsRef = useRef(toasts)
+
+    // Keep ref in sync with state
+    useEffect(() => {
+        toastsRef.current = toasts
+    }, [toasts])
 
     const removeToast = useCallback((id) => {
         setToasts(prev => prev.filter(t => t.id !== id))
@@ -17,9 +23,16 @@ export const NotificationProvider = ({ children }) => {
 
     const addToast = useCallback((message) => {
         const id = Date.now() + Math.random()
-        setToasts(prev => [...prev, { id, message }])
-        setTimeout(() => removeToast(id), 5000)
-    }, [removeToast])
+        console.log('addToast called with message:', message, 'id:', id)
+        setToasts(prev => {
+            const newToasts = [...prev, { id, message }]
+            console.log('Toasts updated, new count:', newToasts.length)
+            return newToasts
+        })
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id))
+        }, 5000)
+    }, [])
 
     useEffect(() => {
         if (!user) return
@@ -75,7 +88,18 @@ export const NotificationProvider = ({ children }) => {
                             
                             if (message) {
                                 console.log('Adding toast notification:', message)
-                                addToast(message)
+                                // Directly update state to ensure it happens immediately
+                                const id = Date.now() + Math.random()
+                                setToasts(prev => {
+                                    console.log('Directly updating toasts, previous count:', prev.length)
+                                    const newToasts = [...prev, { id, message }]
+                                    console.log('New toasts count:', newToasts.length)
+                                    return newToasts
+                                })
+                                // Auto remove after 5 seconds
+                                setTimeout(() => {
+                                    setToasts(prev => prev.filter(t => t.id !== id))
+                                }, 5000)
                             }
                         }
                     }
@@ -113,26 +137,40 @@ export const NotificationProvider = ({ children }) => {
             console.log('Unsubscribing from notifications')
             supabase.removeChannel(channel)
         }
-    }, [user, addToast])
+    }, [user])
 
     return (
         <NotificationContext.Provider value={{ addToast }}>
             {children}
             {/* Toast Container */}
-            <div className="fixed top-5 right-5 z-50 space-y-3">
+            <div className="fixed top-5 right-5 z-[9999] space-y-3 pointer-events-none" style={{ maxWidth: '420px' }}>
                 {toasts.map(toast => (
-                    <div key={toast.id} className="max-w-xs bg-white border border-gray-200 rounded-xl shadow-lg" role="alert">
+                    <div 
+                        key={toast.id} 
+                        className="max-w-xs bg-white border border-gray-200 rounded-xl shadow-lg pointer-events-auto animate-in slide-in-from-top-5 fade-in duration-300" 
+                        role="alert"
+                        style={{ 
+                            animation: 'slideIn 0.3s ease-out',
+                            zIndex: 9999
+                        }}
+                    >
                         <div className="flex p-4">
                             <div className="flex-shrink-0">
                                 <Bell className="h-4 w-4 text-blue-500 mt-0.5" />
                             </div>
-                            <div className="ms-3">
-                                <p className="text-sm text-gray-700">
+                            <div className="ms-3 flex-1">
+                                <p className="text-sm text-gray-700 font-medium">
                                     {toast.message}
                                 </p>
                             </div>
                             <div className="ms-auto ps-3">
-                                <button onClick={() => removeToast(toast.id)} className="inline-flex flex-shrink-0 justify-center items-center h-5 w-5 rounded-lg text-gray-800 opacity-50 hover:opacity-100 focus:outline-none focus:opacity-100">
+                                <button 
+                                    onClick={() => {
+                                        console.log('Closing toast:', toast.id)
+                                        removeToast(toast.id)
+                                    }} 
+                                    className="inline-flex flex-shrink-0 justify-center items-center h-5 w-5 rounded-lg text-gray-800 opacity-50 hover:opacity-100 focus:outline-none focus:opacity-100"
+                                >
                                     <span className="sr-only">Close</span>
                                     <svg className="flex-shrink-0 w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
                                 </button>
@@ -141,6 +179,18 @@ export const NotificationProvider = ({ children }) => {
                     </div>
                 ))}
             </div>
+            <style>{`
+                @keyframes slideIn {
+                    from {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+            `}</style>
         </NotificationContext.Provider>
     )
 }

@@ -55,13 +55,20 @@ export default function ConsultantDashboard() {
             alert('Error approving request: ' + error.message)
         } else {
             // Send notification to sales person
-            await sendNotificationToSales(request.created_by_profile.id, {
-                type: 'approved',
-                requestId: request.id,
-                clientName: request.client_name,
-                date: request.requested_date,
-                time: request.requested_time
-            })
+            const salesPersonId = request.created_by_profile?.id || request.created_by
+            console.log('Sending approval notification to sales person:', salesPersonId, 'Request:', request)
+            
+            if (salesPersonId) {
+                await sendNotificationToSales(salesPersonId, {
+                    type: 'approved',
+                    requestId: request.id,
+                    clientName: request.client_name,
+                    date: request.requested_date,
+                    time: request.requested_time
+                })
+            } else {
+                console.error('Cannot send notification: sales person ID not found', request)
+            }
             addToast(`Request for ${request.client_name} has been approved`)
             fetchRequests()
         }
@@ -82,11 +89,18 @@ export default function ConsultantDashboard() {
             alert('Error rejecting request: ' + error.message)
         } else {
             // Send notification to sales person
-            await sendNotificationToSales(selectedRequest.created_by_profile.id, {
-                type: 'rejected',
-                requestId: selectedRequest.id,
-                clientName: selectedRequest.client_name
-            })
+            const salesPersonId = selectedRequest.created_by_profile?.id || selectedRequest.created_by
+            console.log('Sending rejection notification to sales person:', salesPersonId)
+            
+            if (salesPersonId) {
+                await sendNotificationToSales(salesPersonId, {
+                    type: 'rejected',
+                    requestId: selectedRequest.id,
+                    clientName: selectedRequest.client_name
+                })
+            } else {
+                console.error('Cannot send notification: sales person ID not found', selectedRequest)
+            }
             addToast(`Request for ${selectedRequest.client_name} has been rejected`)
             setShowRejectModal(false)
             setSelectedRequest(null)
@@ -118,14 +132,21 @@ export default function ConsultantDashboard() {
             alert('Error rescheduling request: ' + error.message)
         } else {
             // Send notification to sales person
-            await sendNotificationToSales(selectedRequest.created_by_profile.id, {
-                type: 'rescheduled',
-                requestId: selectedRequest.id,
-                clientName: selectedRequest.client_name,
-                newDate: rescheduleDate,
-                newTime: rescheduleTime,
-                message: rescheduleMessage
-            })
+            const salesPersonId = selectedRequest.created_by_profile?.id || selectedRequest.created_by
+            console.log('Sending reschedule notification to sales person:', salesPersonId)
+            
+            if (salesPersonId) {
+                await sendNotificationToSales(salesPersonId, {
+                    type: 'rescheduled',
+                    requestId: selectedRequest.id,
+                    clientName: selectedRequest.client_name,
+                    newDate: rescheduleDate,
+                    newTime: rescheduleTime,
+                    message: rescheduleMessage
+                })
+            } else {
+                console.error('Cannot send notification: sales person ID not found', selectedRequest)
+            }
             addToast(`Request for ${selectedRequest.client_name} has been rescheduled`)
             setShowRejectModal(false)
             setSelectedRequest(null)
@@ -137,15 +158,42 @@ export default function ConsultantDashboard() {
     }
 
     const sendNotificationToSales = async (salesPersonId, notificationData) => {
-        // Create a notification record or trigger realtime event
-        // For now, we'll use the notification context which listens to database changes
-        // The NotificationContext will handle showing the toast to the sales person
         try {
-            // We can create a notifications table or use the existing realtime subscription
-            // For simplicity, the NotificationContext already listens to request updates
-            // So the sales person will be notified automatically via realtime
+            let message = ''
+            if (notificationData.type === 'approved') {
+                message = `Request for "${notificationData.clientName}" has been approved`
+            } else if (notificationData.type === 'rejected') {
+                message = `Request for "${notificationData.clientName}" has been rejected`
+            } else if (notificationData.type === 'rescheduled') {
+                message = `Request for "${notificationData.clientName}" has been rescheduled to ${notificationData.newDate} at ${notificationData.newTime}`
+            }
+
+            if (message) {
+                console.log('Inserting notification:', {
+                    recipient_id: salesPersonId,
+                    message: message,
+                    type: notificationData.type
+                })
+
+                const { data, error } = await supabase
+                    .from('notifications')
+                    .insert({
+                        recipient_id: salesPersonId,
+                        message: message,
+                        type: notificationData.type
+                    })
+                    .select()
+
+                if (error) {
+                    console.error('Error inserting notification:', error)
+                    alert('Failed to send notification: ' + error.message)
+                } else {
+                    console.log('Notification inserted successfully:', data)
+                }
+            }
         } catch (error) {
             console.error('Error sending notification:', error)
+            alert('Error sending notification: ' + error.message)
         }
     }
 

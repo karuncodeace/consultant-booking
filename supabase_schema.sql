@@ -90,3 +90,56 @@ $$ language plpgsql security definer;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- Create notifications table
+create table notifications (
+  id uuid default uuid_generate_v4() primary key,
+  recipient_id uuid references profiles(id) not null,
+  message text not null,
+  type text,
+  read boolean default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS on notifications
+alter table notifications enable row level security;
+
+-- Notifications policies
+-- Users can view their own notifications
+create policy "Users can view own notifications" on notifications
+  for select using (auth.uid() = recipient_id);
+
+-- Users can insert notifications (for system notifications)
+-- In practice, only consultants/admins should insert, but we'll allow authenticated users
+create policy "Authenticated users can insert notifications" on notifications
+  for insert with check (true);
+
+-- Users can update their own notifications (to mark as read)
+create policy "Users can update own notifications" on notifications
+  for update using (auth.uid() = recipient_id);
+
+-- Users can delete their own notifications
+create policy "Users can delete own notifications" on notifications
+  for delete using (auth.uid() = recipient_id);
+
+-- ============================================
+-- ENABLE REALTIME REPLICATION (REQUIRED)
+-- ============================================
+-- 
+-- The notifications table needs realtime replication enabled for instant notifications to work.
+-- 
+-- OPTION 1: Via Supabase Dashboard (Easiest)
+-- 1. Go to: https://supabase.com/dashboard
+-- 2. Select your project
+-- 3. Navigate to: Database → Replication
+-- 4. Find 'notifications' table and toggle it ON
+--
+-- OPTION 2: Via SQL Editor
+-- Run this command in Supabase SQL Editor:
+-- ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+--
+-- VERIFY: After enabling, you can verify with:
+-- SELECT * FROM pg_publication_tables 
+-- WHERE pubname = 'supabase_realtime' AND tablename = 'notifications';
+--
+-- NOTE: Free plan supports realtime replication - no upgrade needed!

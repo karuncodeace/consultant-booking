@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import { Plus, Calendar, Clock, User } from 'lucide-react'
+import { Plus, Calendar, Clock, User, Bell } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 export default function SalesDashboard() {
     const { user, signOut } = useAuth()
@@ -9,6 +10,9 @@ export default function SalesDashboard() {
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [consultants, setConsultants] = useState([])
+    const [unreadCount, setUnreadCount] = useState(0)
+    const [showNotifications, setShowNotifications] = useState(false)
+    const [notifications, setNotifications] = useState([])
 
     // Form State
     const [clientName, setClientName] = useState('')
@@ -20,19 +24,162 @@ export default function SalesDashboard() {
     useEffect(() => {
         fetchRequests()
         fetchConsultants()
+        fetchNotifications()
+        fetchUnreadCount()
 
-        // Realtime subscription
-        const subscription = supabase
+        // Realtime subscription for requests
+        const requestsChannel = supabase
             .channel('requests_channel')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'requests', filter: `created_by=eq.${user.id}` }, (payload) => {
                 fetchRequests() // Refresh on change
             })
             .subscribe()
 
+        // Realtime subscription for notifications
+        const notificationsChannel = supabase
+            .channel(`instant_notifications_${user.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `recipient_id=eq.${user.id}`
+                },
+                (payload) => {
+                    console.log('New notification received via realtime:', payload)
+                    const newNotification = payload.new
+                    setNotifications(prev => [newNotification, ...prev])
+                    setUnreadCount(prev => prev + 1)
+                    
+                    // Show toast notification
+                    if (newNotification.type === 'approved') {
+                        toast.success(newNotification.message, {
+                            duration: 5000,
+                            icon: '✅',
+                        })
+                    } else if (newNotification.type === 'rejected') {
+                        toast.error(newNotification.message, {
+                            duration: 5000,
+                            icon: '❌',
+                        })
+                    } else {
+                        toast(newNotification.message, {
+                            duration: 5000,
+                            icon: '📅',
+                        })
+                    }
+                }
+            )
+            .subscribe((status) => {
+                console.log('Notifications channel subscription status:', status)
+                if (status === 'SUBSCRIBED') {
+                    console.log('✅ Successfully subscribed to notifications realtime')
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error('❌ Channel subscription error - check if realtime is enabled for notifications table')
+                    toast.error('Notification subscription error. Check console for details.')
+                } else if (status === 'TIMED_OUT') {
+                    console.error('⏱️ Subscription timed out')
+                } else if (status === 'CLOSED') {
+                    console.log('🔒 Subscription closed')
+                }
+            })
+
+        // Note: Badge count is already handled in notificationsChannel, so we don't need a separate channel
+        // This prevents duplicate increments
+
         return () => {
-            subscription.unsubscribe()
+            console.log('Cleaning up subscriptions...')
+            requestsChannel.unsubscribe()
+            notificationsChannel.unsubscribe()
+            supabase.removeChannel(requestsChannel)
+            supabase.removeChannel(notificationsChannel)
         }
     }, [user.id])
+
+    const fetchNotifications = async () => {
+        const { data, error } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('recipient_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(10)
+
+        if (error) {
+            console.error('Error fetching notifications:', error)
+        } else {
+            setNotifications(data || [])
+        }
+    }
+
+    const fetchUnreadCount = async () => {
+        const { count, error } = await supabase
+            .from('notifications')
+            .select('*', { count: 'exact', head: true })
+            .eq('recipient_id', user.id)
+            .eq('read', false)
+
+        if (error) {
+            console.error('Error fetching unread count:', error)
+        } else {
+            console.log('Unread notifications count:', count)
+            setUnreadCount(count || 0)
+        }
+    }
+
+    // Test function to verify notifications work (can be removed later)
+    const testNotification = async () => {
+        console.log('Testing notification insertion...')
+        const { data, error } = await supabase
+            .from('notifications')
+            .insert({
+                recipient_id: user.id,
+                message: 'Test notification - if you see this, notifications are working!',
+                type: 'approved'
+            })
+            .select()
+
+        if (error) {
+            console.error('Test notification error:', error)
+            toast.error('Test failed: ' + error.message)
+        } else {
+            console.log('Test notification inserted:', data)
+            toast.success('Test notification sent! Check if it appears.')
+        }
+    }
+
+    const markAllAsRead = async () => {
+        const { error } = await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('recipient_id', user.id)
+            .eq('read', false)
+
+        if (error) {
+            console.error('Error marking notifications as read:', error)
+            toast.error('Failed to mark notifications as read')
+        } else {
+            setUnreadCount(0)
+            setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+            toast.success('All notifications marked as read')
+        }
+    }
+
+    const clearAllNotifications = async () => {
+        const { error } = await supabase
+            .from('notifications')
+            .delete()
+            .eq('recipient_id', user.id)
+
+        if (error) {
+            console.error('Error clearing notifications:', error)
+            toast.error('Failed to clear notifications')
+        } else {
+            setNotifications([])
+            setUnreadCount(0)
+            toast.success('All notifications cleared')
+        }
+    }
 
     const fetchRequests = async () => {
         const { data, error } = await supabase
@@ -148,6 +295,25 @@ export default function SalesDashboard() {
         }
     }
 
+    // Close notifications dropdown when clicking outside
+    useEffect(() => {
+        if (!showNotifications) return
+
+        const handleClickOutside = (event) => {
+            const notificationButton = document.querySelector('[data-notification-button]')
+            const notificationDropdown = document.querySelector('[data-notification-dropdown]')
+            
+            if (notificationButton && notificationDropdown) {
+                if (!notificationButton.contains(event.target) && !notificationDropdown.contains(event.target)) {
+                    setShowNotifications(false)
+                }
+            }
+        }
+        
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [showNotifications])
+
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
@@ -155,6 +321,83 @@ export default function SalesDashboard() {
                 <h1 className="text-2xl font-bold text-gray-800">Sales Dashboard</h1>
                 <div className="flex items-center gap-4">
                     <span className="text-sm text-gray-600">Welcome, {user.email}</span>
+                    
+                    {/* Test Notification Button (for debugging - remove in production) */}
+                    {process.env.NODE_ENV === 'development' && (
+                        <button
+                            onClick={testNotification}
+                            className="text-xs px-2 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+                            title="Test notification"
+                        >
+                            Test
+                        </button>
+                    )}
+                    
+                    {/* Notification Bell with Badge */}
+                    <div className="relative">
+                        <button
+                            data-notification-button
+                            onClick={() => setShowNotifications(!showNotifications)}
+                            className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <Bell className="w-6 h-6" />
+                            {unreadCount > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                                    {unreadCount > 99 ? '99+' : unreadCount}
+                                </span>
+                            )}
+                        </button>
+
+                        {/* Notifications Dropdown */}
+                        {showNotifications && (
+                            <div 
+                                data-notification-dropdown
+                                className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 z-50 max-h-96 overflow-hidden flex flex-col"
+                            >
+                                <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                                    <h3 className="font-semibold text-gray-800">Notifications</h3>
+                                    <div className="flex gap-2">
+                                        {unreadCount > 0 && (
+                                            <button
+                                                onClick={markAllAsRead}
+                                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                            >
+                                                Mark all read
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={clearAllNotifications}
+                                            className="text-xs text-red-600 hover:text-red-800 font-medium"
+                                        >
+                                            Clear all
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="overflow-y-auto flex-1">
+                                    {notifications.length === 0 ? (
+                                        <div className="px-4 py-8 text-center text-gray-500 text-sm">
+                                            No notifications
+                                        </div>
+                                    ) : (
+                                        notifications.map((notification) => (
+                                            <div
+                                                key={notification.id}
+                                                className={`px-4 py-3 border-b border-gray-100 hover:bg-gray-50 ${
+                                                    !notification.read ? 'bg-blue-50' : ''
+                                                }`}
+                                            >
+                                                <p className="text-sm text-gray-800">{notification.message}</p>
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    {new Date(notification.created_at).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <button onClick={signOut} className="text-sm text-red-600 hover:underline">Sign Out</button>
                     <button
                         onClick={() => setShowModal(true)}
