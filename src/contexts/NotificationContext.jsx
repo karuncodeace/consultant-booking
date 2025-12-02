@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from './AuthContext'
 import { Bell } from 'lucide-react'
@@ -11,54 +11,109 @@ export const NotificationProvider = ({ children }) => {
     const { user } = useAuth()
     const [toasts, setToasts] = useState([])
 
+    const removeToast = useCallback((id) => {
+        setToasts(prev => prev.filter(t => t.id !== id))
+    }, [])
+
+    const addToast = useCallback((message) => {
+        const id = Date.now() + Math.random()
+        setToasts(prev => [...prev, { id, message }])
+        setTimeout(() => removeToast(id), 5000)
+    }, [removeToast])
+
     useEffect(() => {
         if (!user) return
 
-        const subscription = supabase
-            .channel('global_notifications')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'requests' }, (payload) => {
-                const newData = payload.new
-                const oldData = payload.old
-                
-                // Notify sales person if their request status changed
-                if (user.id === newData.created_by && oldData && oldData.status !== newData.status) {
-                    let message = ''
-                    if (newData.status === 'approved') {
-                        message = `Request for "${newData.client_name}" has been approved`
-                    } else if (newData.status === 'rejected') {
-                        message = `Request for "${newData.client_name}" has been rejected`
-                    } else if (newData.status === 'rescheduled' && newData.requested_date && newData.requested_time) {
-                        message = `Request for "${newData.client_name}" has been rescheduled to ${newData.requested_date} at ${newData.requested_time}`
-                    } else if (newData.status) {
-                        message = `Request for "${newData.client_name}" status changed to ${newData.status}`
-                    }
-                    if (message) {
-                        addToast(message)
+        console.log('Setting up notification subscription for user:', user.id)
+
+        // Listen to all request updates and filter in the callback
+        // This is more reliable than using filters in the subscription
+        const channel = supabase
+            .channel(`notifications_${user.id}_${Date.now()}`)
+            .on(
+                'postgres_changes',
+                { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'requests'
+                },
+                (payload) => {
+                    const newData = payload.new
+                    const oldData = payload.old
+                    
+                    console.log('Request update received:', {
+                        requestId: newData.id,
+                        createdBy: newData.created_by,
+                        currentUserId: user.id,
+                        newStatus: newData.status,
+                        oldStatus: oldData?.status,
+                        clientName: newData.client_name
+                    })
+                    
+                    // Only notify if this request belongs to the current user (sales person)
+                    if (user.id === newData.created_by) {
+                        // Check if status actually changed (oldData might not always be available)
+                        const statusChanged = !oldData || oldData.status !== newData.status
+                        
+                        if (statusChanged) {
+                            console.log('Status change detected for sales person:', {
+                                oldStatus: oldData?.status || 'unknown',
+                                newStatus: newData.status,
+                                clientName: newData.client_name
+                            })
+                            
+                            let message = ''
+                            if (newData.status === 'approved') {
+                                message = `Request for "${newData.client_name}" has been approved`
+                            } else if (newData.status === 'rejected') {
+                                message = `Request for "${newData.client_name}" has been rejected`
+                            } else if (newData.status === 'rescheduled' && newData.requested_date && newData.requested_time) {
+                                message = `Request for "${newData.client_name}" has been rescheduled to ${newData.requested_date} at ${newData.requested_time}`
+                            } else if (newData.status && newData.status !== 'pending') {
+                                message = `Request for "${newData.client_name}" status changed to ${newData.status}`
+                            }
+                            
+                            if (message) {
+                                console.log('Adding toast notification:', message)
+                                addToast(message)
+                            }
+                        }
                     }
                 }
-            })
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'requests' }, (payload) => {
-                const newData = payload.new
-                if (user.id === newData.consultant_id) {
-                    addToast(`New request received for ${newData.client_name}`)
+            )
+            .on(
+                'postgres_changes',
+                { 
+                    event: 'INSERT', 
+                    schema: 'public', 
+                    table: 'requests'
+                },
+                (payload) => {
+                    const newData = payload.new
+                    // Notify consultant if they received a new request
+                    if (user.id === newData.consultant_id) {
+                        addToast(`New request received for ${newData.client_name}`)
+                    }
+                }
+            )
+            .subscribe((status) => {
+                console.log('Subscription status:', status)
+                if (status === 'SUBSCRIBED') {
+                    console.log('Successfully subscribed to notifications')
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error('Channel subscription error')
+                } else if (status === 'TIMED_OUT') {
+                    console.error('Subscription timed out')
+                } else if (status === 'CLOSED') {
+                    console.log('Subscription closed')
                 }
             })
-            .subscribe()
 
         return () => {
-            subscription.unsubscribe()
+            console.log('Unsubscribing from notifications')
+            supabase.removeChannel(channel)
         }
-    }, [user])
-
-    const addToast = (message) => {
-        const id = Date.now()
-        setToasts(prev => [...prev, { id, message }])
-        setTimeout(() => removeToast(id), 5000)
-    }
-
-    const removeToast = (id) => {
-        setToasts(prev => prev.filter(t => t.id !== id))
-    }
+    }, [user, addToast])
 
     return (
         <NotificationContext.Provider value={{ addToast }}>
