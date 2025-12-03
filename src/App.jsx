@@ -10,7 +10,7 @@ import AdminDashboard from './pages/AdminDashboard'
 
 import { NotificationProvider } from './contexts/NotificationContext'
 import { useEffect } from 'react'
-import { requestFCMPermission } from './firebase'   // ← IMPORTANT
+import { requestPermissionAndToken } from './firebase'
 
 const HomeRedirect = () => {
   const { profile, loading } = useAuth()
