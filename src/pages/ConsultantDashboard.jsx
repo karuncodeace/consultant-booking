@@ -184,6 +184,11 @@ export default function ConsultantDashboard() {
                     type: notificationData.type
                 })
 
+                // Get current user to verify authentication
+                const { data: { user: currentUser } } = await supabase.auth.getUser()
+                console.log('Current user inserting notification:', currentUser?.id)
+                console.log('Recipient ID (sales person):', salesPersonId)
+
                 const { data, error } = await supabase
                     .from('notifications')
                     .insert({
@@ -195,7 +200,13 @@ export default function ConsultantDashboard() {
 
                 if (error) {
                     console.error('Error inserting notification:', error)
-                    alert('Failed to send notification: ' + error.message)
+                    console.error('Error details:', {
+                        message: error.message,
+                        details: error.details,
+                        hint: error.hint,
+                        code: error.code
+                    })
+                    toast.error('Failed to send notification: ' + error.message)
                 } else {
                     console.log('Notification inserted successfully:', data)
                     
