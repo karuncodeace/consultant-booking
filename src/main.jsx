@@ -9,16 +9,16 @@ import { requestFCMPermission } from "./firebase";  // ADD THIS
 const queryClient = new QueryClient()
 
 // Register Firebase service worker
-if ("serviceWorker" in navigator) {
+if ('serviceWorker' in navigator) {
   navigator.serviceWorker
-    .register("/firebase-messaging-sw.js")
+    .register('/firebase-messaging-sw.js')
     .then((registration) => {
-      console.log("Service Worker registered:", registration);
-      requestFCMPermission(); // ask permission here
+      console.log('FCM Service Worker registered:', registration);
     })
-    .catch((err) => console.error("Service worker error:", err));
+    .catch((error) => {
+      console.error('FCM SW registration failed:', error);
+    });
 }
-
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
