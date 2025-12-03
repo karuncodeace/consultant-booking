@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotification } from '../contexts/NotificationContext'
 import { Check, X, Clock, Calendar, MessageSquare } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 export default function ConsultantDashboard() {
     const { user, signOut } = useAuth()
