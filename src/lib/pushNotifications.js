@@ -57,15 +57,43 @@ export async function subscribeUser() {
         // 3. Subscribe to push
         if (!VAPID_PUBLIC_KEY) {
             console.warn('VAPID_PUBLIC_KEY not set. Please set VITE_VAPID_PUBLIC_KEY in .env file')
+            console.warn('Push notifications will be disabled until VAPID key is configured')
             return null
         }
 
-        const subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-        })
+        // Validate VAPID key format
+        if (VAPID_PUBLIC_KEY.length < 80) {
+            console.error('VAPID_PUBLIC_KEY appears to be invalid (too short). Expected base64 string ~87 characters.')
+            return null
+        }
 
-        console.log('Push subscription created:', subscription)
+        let subscription
+        try {
+            subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+            })
+            console.log('Push subscription created:', subscription)
+        } catch (subscribeError) {
+            console.error('Failed to subscribe to push notifications:', subscribeError)
+            console.error('Error details:', {
+                name: subscribeError.name,
+                message: subscribeError.message,
+                stack: subscribeError.stack
+            })
+            
+            // If it's a VAPID key error, provide helpful message
+            if (subscribeError.message?.includes('Invalid applicationServerKey') || 
+                subscribeError.message?.includes('Registration failed')) {
+                console.error('⚠️ VAPID key may be incorrect. Please verify:')
+                console.error('1. VITE_VAPID_PUBLIC_KEY is set in .env file')
+                console.error('2. The key matches the one used in Supabase Edge Function secrets')
+                console.error('3. The key is in base64 URL-safe format')
+            }
+            
+            // Return null instead of throwing - push notifications are optional
+            return null
+        }
 
         // 4. Get current user
         const { data: { user } } = await supabase.auth.getUser()
@@ -94,6 +122,8 @@ export async function subscribeUser() {
         return subscription
     } catch (error) {
         console.error('Error subscribing to push notifications:', error)
+        console.error('Push notifications are optional - app will continue to work without them')
+        // Don't throw - push notifications are optional, app should work without them
         return null
     }
 }

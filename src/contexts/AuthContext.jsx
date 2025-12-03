@@ -18,10 +18,11 @@ export const AuthProvider = ({ children }) => {
             if (session?.user) {
                 fetchProfile(session.user.id)
                 // Subscribe to push notifications on initial load if logged in
+                // Push notifications are optional - failures won't break the app
                 try {
                     await subscribeUser()
                 } catch (error) {
-                    console.error('Error subscribing to push notifications:', error)
+                    console.warn('Push notification subscription failed (optional feature):', error)
                 }
             } else setLoading(false)
         })
@@ -32,10 +33,11 @@ export const AuthProvider = ({ children }) => {
             if (session?.user) {
                 fetchProfile(session.user.id)
                 // Subscribe to push notifications on login
+                // Push notifications are optional - failures won't break the app
                 try {
                     await subscribeUser()
                 } catch (error) {
-                    console.error('Error subscribing to push notifications:', error)
+                    console.warn('Push notification subscription failed (optional feature):', error)
                 }
             } else {
                 setProfile(null)
