@@ -4,10 +4,13 @@ import RoleGuard from './components/RoleGuard'
 import Login from './pages/Login'
 import { Toaster } from 'react-hot-toast'
 
-// Placeholder components for now
 import SalesDashboard from './pages/SalesDashboard'
 import ConsultantDashboard from './pages/ConsultantDashboard'
 import AdminDashboard from './pages/AdminDashboard'
+
+import { NotificationProvider } from './contexts/NotificationContext'
+import { useEffect } from 'react'
+import { requestFCMPermission } from './firebase'   // ← IMPORTANT
 
 const HomeRedirect = () => {
   const { profile, loading } = useAuth()
@@ -18,9 +21,11 @@ const HomeRedirect = () => {
   return <Navigate to="/login" replace />
 }
 
-import { NotificationProvider } from './contexts/NotificationContext'
-
 function App() {
+  useEffect(() => {
+    requestFCMPermission();   // ← ask notification + generate token
+  }, []);
+
   return (
     <Router>
       <AuthProvider>
@@ -41,10 +46,9 @@ function App() {
             </Route>
 
             <Route path="/" element={<HomeRedirect />} />
-            
-            {/* Catch-all route - redirect unknown routes to home */}
             <Route path="*" element={<HomeRedirect />} />
           </Routes>
+
           <Toaster 
             position="top-right"
             toastOptions={{
@@ -55,19 +59,7 @@ function App() {
                 border: '1px solid #e5e7eb',
                 borderRadius: '0.75rem',
                 boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-              },
-              success: {
-                iconTheme: {
-                  primary: '#10b981',
-                  secondary: '#fff',
-                },
-              },
-              error: {
-                iconTheme: {
-                  primary: '#ef4444',
-                  secondary: '#fff',
-                },
-              },
+              }
             }}
           />
         </NotificationProvider>

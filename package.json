@@ -13,6 +13,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.86.0",
     "@tanstack/react-query": "^5.90.11",
+    "firebase": "^12.6.0",
     "lucide-react": "^0.555.0",
     "preline": "^3.2.3",
     "react": "^19.2.0",
