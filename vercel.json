@@ -1,23 +1,12 @@
 {
-  "rewrites": [
-    { 
-      "source": "/(.*)", 
-      "destination": "/",
-      "has": [
-        {
-          "type": "header",
-          "key": "accept",
-          "value": "(text/html|application/xhtml\\+xml)"
-        }
-      ]
-    }
-  ],
+  "cleanUrls": true,
+  "trailingSlash": false,
   "headers": [
     {
-      "source": "/firebase-messaging-sw.js",
+      "source": "/service-worker.js",
       "headers": [
-        { "key": "Content-Type", "value": "application/javascript" },
-        { "key": "Service-Worker-Allowed", "value": "/" }
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "Content-Type", "value": "application/javascript" }
       ]
     }
   ]
