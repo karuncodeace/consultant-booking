@@ -147,3 +147,32 @@ create policy "Users can delete own notifications" on notifications
 -- WHERE pubname = 'supabase_realtime' AND tablename = 'notifications';
 --
 -- NOTE: Free plan supports realtime replication - no upgrade needed!
+
+-- Create subscriptions table for push notifications
+create table subscriptions (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references auth.users(id) not null unique,
+  subscription jsonb not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS on subscriptions
+alter table subscriptions enable row level security;
+
+-- Subscriptions policies
+-- Users can view their own subscriptions
+create policy "Users can view own subscriptions" on subscriptions
+  for select using (auth.uid() = user_id);
+
+-- Users can insert their own subscriptions
+create policy "Users can insert own subscriptions" on subscriptions
+  for insert with check (auth.uid() = user_id);
+
+-- Users can update their own subscriptions
+create policy "Users can update own subscriptions" on subscriptions
+  for update using (auth.uid() = user_id);
+
+-- Users can delete their own subscriptions
+create policy "Users can delete own subscriptions" on subscriptions
+  for delete using (auth.uid() = user_id);

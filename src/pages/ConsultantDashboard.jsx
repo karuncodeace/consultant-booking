@@ -198,6 +198,34 @@ export default function ConsultantDashboard() {
                     alert('Failed to send notification: ' + error.message)
                 } else {
                     console.log('Notification inserted successfully:', data)
+                    
+                    // Send push notification via Edge Function
+                    try {
+                        const { error: pushError } = await supabase.functions.invoke('send-notification', {
+                            body: {
+                                recipient_id: salesPersonId,
+                                title: notificationData.type === 'approved' ? 'Request Approved' : 
+                                       notificationData.type === 'rejected' ? 'Request Rejected' : 
+                                       'Request Rescheduled',
+                                body: message,
+                                data: {
+                                    type: notificationData.type,
+                                    requestId: notificationData.requestId,
+                                    clientName: notificationData.clientName
+                                }
+                            }
+                        })
+                        
+                        if (pushError) {
+                            console.error('Error sending push notification:', pushError)
+                            // Don't show error to user - push notification is optional
+                        } else {
+                            console.log('Push notification sent successfully')
+                        }
+                    } catch (pushErr) {
+                        console.error('Error calling push notification function:', pushErr)
+                        // Push notifications are optional, so we don't block the flow
+                    }
                 }
             }
         } catch (error) {

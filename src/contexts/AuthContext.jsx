@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { subscribeUser } from '../lib/pushNotifications'
 
 const AuthContext = createContext({})
 
@@ -12,17 +13,31 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         // Check active session
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        supabase.auth.getSession().then(async ({ data: { session } }) => {
             setUser(session?.user ?? null)
-            if (session?.user) fetchProfile(session.user.id)
-            else setLoading(false)
+            if (session?.user) {
+                fetchProfile(session.user.id)
+                // Subscribe to push notifications on initial load if logged in
+                try {
+                    await subscribeUser()
+                } catch (error) {
+                    console.error('Error subscribing to push notifications:', error)
+                }
+            } else setLoading(false)
         })
 
         // Listen for changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             setUser(session?.user ?? null)
-            if (session?.user) fetchProfile(session.user.id)
-            else {
+            if (session?.user) {
+                fetchProfile(session.user.id)
+                // Subscribe to push notifications on login
+                try {
+                    await subscribeUser()
+                } catch (error) {
+                    console.error('Error subscribing to push notifications:', error)
+                }
+            } else {
                 setProfile(null)
                 setLoading(false)
             }
