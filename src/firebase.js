@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { getMessaging, getToken } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBXEbwtz8SfeHVdgY2i_YogD6vRxNJsw8c",
@@ -13,27 +13,28 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const messaging = getMessaging(app);
 
-export async function requestFCMPermission() {
+export async function requestPermissionAndToken() {
   try {
+    console.log("🔄 Registering service worker...");
+
+    const swReg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+    console.log("✅ SW Registered:", swReg);
+
+    console.log("🔄 Asking notification permission...");
     const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      console.log("Notification permission denied");
-      return;
-    }
+    if (permission !== "granted") throw new Error("Permission not granted!");
 
+    console.log("🔄 Generating FCM token...");
     const token = await getToken(messaging, {
-      vapidKey: "BE66LRDqIDAVegEdaetcCDiK1YfYAJ7mYm2rZJUmz7VbvzEmRZVW5yjz-VtxJJDX1hVwkimzrMhJS5lY2PTeV2o"
+      vapidKey: "BE66LRDqIDAVegEdaetcCDiK1YfYAJ7mYm2rZJUmz7VbvzEmRZVW5yjz-VtxJJDX1hVwkimzrMhJS5lY2PTeV2o",
+      serviceWorkerRegistration: swReg,
     });
 
-    console.log("🌟 FCM TOKEN:", token);
+    console.log("🎉 FCM token generated:", token);
+    return token;
 
-    onMessage(messaging, (payload) => {
-      console.log("Foreground message:", payload);
-      new Notification(payload.notification.title, {
-        body: payload.notification.body
-      });
-    });
   } catch (err) {
-    console.error("Error generating FCM token", err);
+    console.error("🔥 Error generating FCM token", err);
+    return null;
   }
 }

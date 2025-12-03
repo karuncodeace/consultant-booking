@@ -23,8 +23,9 @@ const HomeRedirect = () => {
 
 function App() {
   useEffect(() => {
-    requestFCMPermission();   // ← ask notification + generate token
+    requestPermissionAndToken();
   }, []);
+
 
   return (
     <Router>
