@@ -23,7 +23,12 @@ const HomeRedirect = () => {
 
 function App() {
   useEffect(() => {
-    requestPermissionAndToken();
+    // Only run in browser environment
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      requestPermissionAndToken().catch((error) => {
+        console.warn('Push notification setup failed (optional feature):', error);
+      });
+    }
   }, []);
 
 
