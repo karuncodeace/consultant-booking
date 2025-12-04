@@ -5,7 +5,7 @@ import { Check, X, Clock, Calendar, MessageSquare } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function ConsultantDashboard() {
-    const { user, signOut } = useAuth()
+    const { user, profile, signOut } = useAuth()
     const [requests, setRequests] = useState([])
     const [loading, setLoading] = useState(true)
     const [selectedRequest, setSelectedRequest] = useState(null)
@@ -181,13 +181,35 @@ export default function ConsultantDashboard() {
 
     const sendNotificationToSales = async (salesPersonId, notificationData) => {
         try {
+            // Get consultant name from profile
+            const consultantName = profile?.full_name || user?.email || 'Consultant'
+            
+            // Helper function to format date
+            const formatDate = (dateString) => {
+                if (!dateString) return ''
+                try {
+                    const date = new Date(dateString)
+                    return date.toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    })
+                } catch {
+                    return dateString
+                }
+            }
+            
             let message = ''
             if (notificationData.type === 'approved') {
-                message = `Request for "${notificationData.clientName}" has been approved`
+                // Format: "Your request for {client name} on {date}, {time} has been approved by {consultant name}"
+                const formattedDate = formatDate(notificationData.date)
+                message = `Your request for ${notificationData.clientName} on ${formattedDate}, ${notificationData.time} has been approved by ${consultantName}`
             } else if (notificationData.type === 'rejected') {
-                message = `Request for "${notificationData.clientName}" has been rejected`
+                message = `Your request for ${notificationData.clientName} has been rejected by ${consultantName}`
             } else if (notificationData.type === 'rescheduled') {
-                message = `Request for "${notificationData.clientName}" has been rescheduled to ${notificationData.newDate} from ${notificationData.newTime}`
+                // Format: "Your request for {client name} on {date}, {time} has been rescheduled by {consultant name}"
+                const formattedDate = formatDate(notificationData.newDate)
+                message = `Your request for ${notificationData.clientName} on ${formattedDate}, ${notificationData.newTime} has been rescheduled by ${consultantName}`
             }
 
             if (message) {

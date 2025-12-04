@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { BarChart, Users, CheckCircle, XCircle, Clock } from 'lucide-react'
+import NotificationTestPanel from '../components/NotificationTestPanel'
 
 export default function AdminDashboard() {
     const { user, signOut } = useAuth()
@@ -61,6 +62,11 @@ export default function AdminDashboard() {
             </header>
 
             <main className="p-6 max-w-7xl mx-auto">
+                {/* Notification Test Panel */}
+                <div className="mb-6">
+                    <NotificationTestPanel />
+                </div>
+
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                     <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4">

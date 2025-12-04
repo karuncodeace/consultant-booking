@@ -11,6 +11,8 @@ import AdminDashboard from './pages/AdminDashboard'
 import { NotificationProvider } from './contexts/NotificationContext'
 import { useEffect } from 'react'
 import { requestPermissionAndToken } from './firebase'
+import { requestNotificationPermission } from './notifications/desktopNotifications'
+import NotificationSubscriber from './components/NotificationSubscriber'
 
 const HomeRedirect = () => {
   const { profile, loading } = useAuth()
@@ -22,7 +24,21 @@ const HomeRedirect = () => {
 }
 
 function App() {
+  // Request notification permission on app load
   useEffect(() => {
+    // Request desktop notification permission
+    requestNotificationPermission()
+      .then((granted) => {
+        if (granted) {
+          console.log('Desktop notification permission granted')
+        } else {
+          console.log('Desktop notification permission denied or not supported')
+        }
+      })
+      .catch((error) => {
+        console.error('Error requesting notification permission:', error)
+      })
+
     // Only run in browser environment
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       requestPermissionAndToken().catch((error) => {
@@ -31,10 +47,14 @@ function App() {
     }
   }, []);
 
+  // Subscribe to notifications when user is logged in
+  // This will be handled by a component that has access to auth context
+
 
   return (
     <Router>
       <AuthProvider>
+        <NotificationSubscriber />
         <NotificationProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
