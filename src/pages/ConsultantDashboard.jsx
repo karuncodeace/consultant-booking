@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import { useNotification } from '../contexts/NotificationContext'
 import { Check, X, Clock, Calendar, MessageSquare } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function ConsultantDashboard() {
     const { user, signOut } = useAuth()
-    const { addToast } = useNotification()
     const [requests, setRequests] = useState([])
     const [loading, setLoading] = useState(true)
     const [selectedRequest, setSelectedRequest] = useState(null)
@@ -20,15 +18,26 @@ export default function ConsultantDashboard() {
     useEffect(() => {
         fetchRequests()
 
+        // Realtime subscription for requests assigned to this consultant
+        // Listen to ALL events (INSERT for new requests, UPDATE for status changes)
         const subscription = supabase
-            .channel('consultant_requests')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'requests', filter: `consultant_id=eq.${user.id}` }, (payload) => {
-                fetchRequests()
+            .channel(`consultant_requests_${user.id}`)
+            .on('postgres_changes', { 
+                event: '*', 
+                schema: 'public', 
+                table: 'requests', 
+                filter: `consultant_id=eq.${user.id}` 
+            }, (payload) => {
+                console.log('Request changed (consultant):', payload)
+                fetchRequests() // Refresh on any change
             })
-            .subscribe()
+            .subscribe((status) => {
+                console.log('Consultant requests channel subscription status:', status)
+            })
 
         return () => {
             subscription.unsubscribe()
+            supabase.removeChannel(subscription)
         }
     }, [user.id])
 
@@ -54,24 +63,25 @@ export default function ConsultantDashboard() {
             .eq('id', request.id)
 
         if (error) {
-            alert('Error approving request: ' + error.message)
+            toast.error('Error approving request: ' + error.message)
         } else {
-            // Send notification to sales person
-            const salesPersonId = request.created_by_profile?.id || request.created_by
-            console.log('Sending approval notification to sales person:', salesPersonId, 'Request:', request)
+            toast.success(`Request for ${request.client_name} has been approved`)
             
+            // Send notification to sales person (optional - won't break if it fails)
+            const salesPersonId = request.created_by_profile?.id || request.created_by
             if (salesPersonId) {
-                await sendNotificationToSales(salesPersonId, {
+                sendNotificationToSales(salesPersonId, {
                     type: 'approved',
                     requestId: request.id,
                     clientName: request.client_name,
                     date: request.requested_date,
                     time: `${request.from_time} - ${request.to_time}`
+                }).catch(err => {
+                    console.warn('Notification failed (optional):', err)
                 })
-            } else {
-                console.error('Cannot send notification: sales person ID not found', request)
             }
-            addToast(`Request for ${request.client_name} has been approved`)
+            
+            // Refresh requests immediately - realtime subscription will also update
             fetchRequests()
         }
     }
@@ -88,40 +98,41 @@ export default function ConsultantDashboard() {
             .eq('id', selectedRequest.id)
 
         if (error) {
-            alert('Error rejecting request: ' + error.message)
+            toast.error('Error rejecting request: ' + error.message)
         } else {
-            // Send notification to sales person
-            const salesPersonId = selectedRequest.created_by_profile?.id || selectedRequest.created_by
-            console.log('Sending rejection notification to sales person:', salesPersonId)
+            toast.success(`Request for ${selectedRequest.client_name} has been rejected`)
             
+            // Send notification to sales person (optional - won't break if it fails)
+            const salesPersonId = selectedRequest.created_by_profile?.id || selectedRequest.created_by
             if (salesPersonId) {
-                await sendNotificationToSales(salesPersonId, {
+                sendNotificationToSales(salesPersonId, {
                     type: 'rejected',
                     requestId: selectedRequest.id,
                     clientName: selectedRequest.client_name
+                }).catch(err => {
+                    console.warn('Notification failed (optional):', err)
                 })
-            } else {
-                console.error('Cannot send notification: sales person ID not found', selectedRequest)
             }
-            addToast(`Request for ${selectedRequest.client_name} has been rejected`)
+            
             setShowRejectModal(false)
             setSelectedRequest(null)
             setRescheduleDate('')
             setRescheduleFromTime('')
             setRescheduleToTime('')
             setRescheduleMessage('')
+            // Refresh requests immediately - realtime subscription will also update
             fetchRequests()
         }
     }
 
     const handleReschedule = async () => {
         if (!selectedRequest || !rescheduleDate || !rescheduleFromTime || !rescheduleToTime) {
-            alert('Please provide date, from time, and to time for rescheduling')
+            toast.error('Please provide date, from time, and to time for rescheduling')
             return
         }
 
         if (rescheduleFromTime >= rescheduleToTime) {
-            alert('End time must be after start time')
+            toast.error('End time must be after start time')
             return
         }
 
@@ -138,31 +149,32 @@ export default function ConsultantDashboard() {
             .eq('id', selectedRequest.id)
 
         if (error) {
-            alert('Error rescheduling request: ' + error.message)
+            toast.error('Error rescheduling request: ' + error.message)
         } else {
-            // Send notification to sales person
-            const salesPersonId = selectedRequest.created_by_profile?.id || selectedRequest.created_by
-            console.log('Sending reschedule notification to sales person:', salesPersonId)
+            toast.success(`Request for ${selectedRequest.client_name} has been rescheduled`)
             
+            // Send notification to sales person (optional - won't break if it fails)
+            const salesPersonId = selectedRequest.created_by_profile?.id || selectedRequest.created_by
             if (salesPersonId) {
-                await sendNotificationToSales(salesPersonId, {
+                sendNotificationToSales(salesPersonId, {
                     type: 'rescheduled',
                     requestId: selectedRequest.id,
                     clientName: selectedRequest.client_name,
                     newDate: rescheduleDate,
                     newTime: `${rescheduleFromTime} - ${rescheduleToTime}`,
                     message: rescheduleMessage
+                }).catch(err => {
+                    console.warn('Notification failed (optional):', err)
                 })
-            } else {
-                console.error('Cannot send notification: sales person ID not found', selectedRequest)
             }
-            addToast(`Request for ${selectedRequest.client_name} has been rescheduled`)
+            
             setShowRejectModal(false)
             setSelectedRequest(null)
             setRescheduleDate('')
             setRescheduleFromTime('')
             setRescheduleToTime('')
             setRescheduleMessage('')
+            // Refresh requests immediately - realtime subscription will also update
             fetchRequests()
         }
     }
@@ -279,25 +291,33 @@ export default function ConsultantDashboard() {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <header className="bg-white shadow-sm py-4 px-6 flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-gray-800">Consultant Dashboard</h1>
+            <header className="bg-white shadow-sm border-b border-gray-200 py-4 px-6 flex justify-between items-center">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Consultant Dashboard</h1>
+                    <p className="text-sm text-gray-500 mt-0.5">Review and manage availability requests</p>
+                </div>
                 <div className="flex items-center gap-4">
                     <span className="text-sm text-gray-600">Welcome, {user.email}</span>
-                    <button onClick={signOut} className="text-sm text-red-600 hover:underline">Sign Out</button>
+                    <button onClick={signOut} className="text-sm text-red-600 hover:text-red-700 hover:underline font-medium">Sign Out</button>
                 </div>
             </header>
 
             <main className="p-6 max-w-7xl mx-auto">
                 <div className="mb-6">
-                    <h2 className="text-xl font-semibold text-gray-800">All Requests</h2>
-                    <p className="text-sm text-gray-500">Manage your availability requests here.</p>
+                    <h2 className="text-xl font-semibold text-gray-900">All Requests</h2>
+                    <p className="text-sm text-gray-500 mt-1">Review and respond to availability requests from sales team.</p>
                 </div>
 
                 {loading ? (
-                    <div className="text-center py-10 text-gray-600">Loading...</div>
+                    <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-100">
+                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <p className="mt-4 text-gray-600">Loading requests...</p>
+                    </div>
                 ) : requests.length === 0 ? (
-                    <div className="bg-white rounded-xl shadow-sm p-10 text-center">
-                        <div className="text-gray-500">No requests at the moment.</div>
+                    <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-100">
+                        <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-600 font-medium">No requests at the moment</p>
+                        <p className="text-sm text-gray-500 mt-1">Requests from sales team will appear here</p>
                     </div>
                 ) : (
                     <div className="space-y-8">
@@ -307,11 +327,11 @@ export default function ConsultantDashboard() {
                                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Pending Requests ({groupedRequests.pending.length})</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {groupedRequests.pending.map(req => (
-                                        <div key={req.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col">
+                                        <div key={req.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow p-6 flex flex-col">
                                             <div className="flex justify-between items-start mb-4">
                                                 <div>
-                                                    <h3 className="font-bold text-gray-800">{req.client_name}</h3>
-                                                    <p className="text-xs text-gray-500">Requested by: {req.created_by_profile?.full_name || 'Sales Rep'}</p>
+                                                    <h3 className="font-bold text-gray-900 text-lg">{req.client_name}</h3>
+                                                    <p className="text-xs text-gray-500 mt-1">Requested by: {req.created_by_profile?.full_name || 'Sales Rep'}</p>
                                                 </div>
                                                 {getStatusBadge(req.status)}
                                             </div>
@@ -337,17 +357,17 @@ export default function ConsultantDashboard() {
                                                 )}
                                             </div>
 
-                                            <div className="grid grid-cols-2 gap-2 mt-auto">
+                                            <div className="grid grid-cols-2 gap-3 mt-auto pt-4 border-t border-gray-100">
                                                 <button
                                                     onClick={() => handleApprove(req)}
-                                                    className="py-2 px-3 inline-flex justify-center items-center gap-x-2 text-sm font-semibold rounded-lg border border-transparent bg-teal-500 text-white hover:bg-teal-600"
+                                                    className="py-2.5 px-4 inline-flex justify-center items-center gap-x-2 text-sm font-semibold rounded-lg border border-transparent bg-teal-500 text-white hover:bg-teal-600 transition-colors shadow-sm"
                                                 >
                                                     <Check size={16} />
                                                     Accept
                                                 </button>
                                                 <button
                                                     onClick={() => openRejectModal(req)}
-                                                    className="py-2 px-3 inline-flex justify-center items-center gap-x-2 text-sm font-semibold rounded-lg border border-transparent bg-red-500 text-white hover:bg-red-600"
+                                                    className="py-2.5 px-4 inline-flex justify-center items-center gap-x-2 text-sm font-semibold rounded-lg border border-transparent bg-red-500 text-white hover:bg-red-600 transition-colors shadow-sm"
                                                 >
                                                     <X size={16} />
                                                     Reject
@@ -365,11 +385,11 @@ export default function ConsultantDashboard() {
                                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Approved Requests ({groupedRequests.approved.length})</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {groupedRequests.approved.map(req => (
-                                        <div key={req.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col">
+                                        <div key={req.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow p-6 flex flex-col">
                                             <div className="flex justify-between items-start mb-4">
                                                 <div>
-                                                    <h3 className="font-bold text-gray-800">{req.client_name}</h3>
-                                                    <p className="text-xs text-gray-500">Requested by: {req.created_by_profile?.full_name || 'Sales Rep'}</p>
+                                                    <h3 className="font-bold text-gray-900 text-lg">{req.client_name}</h3>
+                                                    <p className="text-xs text-gray-500 mt-1">Requested by: {req.created_by_profile?.full_name || 'Sales Rep'}</p>
                                                 </div>
                                                 {getStatusBadge(req.status)}
                                             </div>
@@ -406,11 +426,11 @@ export default function ConsultantDashboard() {
                                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Rejected Requests ({groupedRequests.rejected.length})</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {groupedRequests.rejected.map(req => (
-                                        <div key={req.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col">
+                                        <div key={req.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow p-6 flex flex-col">
                                             <div className="flex justify-between items-start mb-4">
                                                 <div>
-                                                    <h3 className="font-bold text-gray-800">{req.client_name}</h3>
-                                                    <p className="text-xs text-gray-500">Requested by: {req.created_by_profile?.full_name || 'Sales Rep'}</p>
+                                                    <h3 className="font-bold text-gray-900 text-lg">{req.client_name}</h3>
+                                                    <p className="text-xs text-gray-500 mt-1">Requested by: {req.created_by_profile?.full_name || 'Sales Rep'}</p>
                                                 </div>
                                                 {getStatusBadge(req.status)}
                                             </div>
@@ -447,11 +467,11 @@ export default function ConsultantDashboard() {
                                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Rescheduled Requests ({groupedRequests.rescheduled.length})</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {groupedRequests.rescheduled.map(req => (
-                                        <div key={req.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col">
+                                        <div key={req.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow p-6 flex flex-col">
                                             <div className="flex justify-between items-start mb-4">
                                                 <div>
-                                                    <h3 className="font-bold text-gray-800">{req.client_name}</h3>
-                                                    <p className="text-xs text-gray-500">Requested by: {req.created_by_profile?.full_name || 'Sales Rep'}</p>
+                                                    <h3 className="font-bold text-gray-900 text-lg">{req.client_name}</h3>
+                                                    <p className="text-xs text-gray-500 mt-1">Requested by: {req.created_by_profile?.full_name || 'Sales Rep'}</p>
                                                 </div>
                                                 {getStatusBadge(req.status)}
                                             </div>
@@ -487,10 +507,10 @@ export default function ConsultantDashboard() {
 
             {/* Reject/Reschedule Modal */}
             {showRejectModal && selectedRequest && (
-                <div className="fixed inset-0 z-50 overflow-x-hidden overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6 border border-gray-200">
-                        <h3 className="text-lg font-bold text-gray-800 mb-4">Reject & Reschedule Request</h3>
-                        <p className="text-sm text-gray-600 mb-4">You can reject this request and optionally propose a new time.</p>
+                <div className="fixed inset-0 z-50 overflow-x-hidden overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">Reject & Reschedule Request</h3>
+                        <p className="text-sm text-gray-600 mb-6">You can reject this request and optionally propose a new time.</p>
                         
                         <div className="space-y-4">
                             <div>
